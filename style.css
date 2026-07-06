@@ -1,0 +1,149 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f5f2ee;
+  --card-bg: #ffffff;
+  --text: #2b2118;
+  --muted: #7a6f63;
+  --accent: #c98a3e;
+  --border: #e3dcd2;
+  --error: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1712;
+    --card-bg: #2a231c;
+    --text: #f2ece3;
+    --muted: #b3a595;
+    --accent: #e0a85f;
+    --border: #3d342a;
+    --error: #f2b8b5;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0 0 4px;
+}
+
+.subtitle {
+  margin: 0 0 24px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.input-group {
+  display: flex;
+  gap: 8px;
+}
+
+input, select {
+  font-size: 1rem;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  width: 100%;
+}
+
+select {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.unit-label {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+}
+
+.advanced {
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.advanced summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.advanced .field {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.advanced .field + .field {
+  margin-top: 12px;
+}
+
+.error {
+  background: color-mix(in srgb, var(--error) 15%, transparent);
+  color: var(--error);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+}
+
+.result {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 0;
+}
+
+.result-label {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.result-value {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--accent);
+}
