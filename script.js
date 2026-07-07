@@ -20,9 +20,7 @@ function makeIngredient(o) {
   };
 }
 
-// Which ingredient (by id) each metric currently solves for, or null if unassigned.
 const METRICS = ['fat', 'ts', 'pod', 'pac', 'mass'];
-const assignments = { fat: null, ts: null, pod: null, pac: null, mass: null };
 
 const PRESETS = [
   { name: 'Cream, 30% fat', mass: 610, density: 0.99, water: 0.646, fat: 0.30, solute: 0.029, other: 0.025, pod: 0.16, pac: 1.00 },
@@ -126,43 +124,66 @@ function solveLinearSystem(A, b) {
   return M.map((row, i) => row[n] / row[i]);
 }
 
-function solveForTargets(list, freeIds, activeTargets) {
-  const freeList = list.filter((i) => freeIds.has(i.id));
-  const lockedList = list.filter((i) => !freeIds.has(i.id));
-  const k = freeList.length;
-
-  if (k === 0) return { success: false, reason: 'Tick "Free" on at least one ingredient above.' };
-  if (activeTargets.length !== k) {
+// Solves for ALL ingredient masses at once — nothing is held fixed. With k active targets and
+// n ingredients (k <= n, usually k << n), the system is underdetermined, so there are infinitely
+// many mixes that hit the targets exactly. We pick the one closest to the current recipe in a
+// weighted least-squares sense: minimize the sum of squared *relative* changes
+// (sum((Δmass_i / mass_i)^2)), which is the standard minimum-norm least-squares solution once
+// each ingredient's row is rescaled by its own current mass. That reduces to solving a small
+// k x k system (the Gram matrix B*B^T) with the same Gauss-Jordan solver as a plain inverse —
+// this is exactly "applying the inverted matrix," generalized to a non-square system via its
+// Moore-Penrose pseudo-inverse. Ingredients with zero coefficient for every active target get
+// zero change automatically; ingredients that barely move the target need to move very little
+// (in relative terms) to satisfy it, so change concentrates on whichever ingredients are actually
+// relevant instead of being spread evenly or dumped onto one arbitrary ingredient.
+function solveAllIngredients(list, activeTargets) {
+  const n = list.length;
+  const k = activeTargets.length;
+  if (k === 0) return { success: true, result: [] };
+  if (k > n) {
     return {
       success: false,
-      reason: `${k} free ingredient(s) selected but ${activeTargets.length} target(s) ticked — these counts must match.`,
+      reason: `${k} active target(s) but only ${n} ingredient(s) in the mix — remove a target or add more ingredients.`,
     };
   }
 
-  const Cmass = lockedList.reduce((s, i) => s + i.mass, 0);
-  const A = [];
-  const b = [];
+  const EPS = 1e-9;
+  const m0 = list.map((ing) => ing.mass);
+  const M0 = m0.reduce((s, m) => s + m, 0);
+  const scale = m0.map((m) => (Math.abs(m) > EPS ? m : 1));
 
+  const rawCoef = []; // k x n, coefficient of ingredient i's *absolute* mass change in target j's equation
+  const c = []; // k, required total shift in target j's equation given the current mix
   for (const t of activeTargets) {
     if (t.metric === 'mass') {
-      A.push(freeList.map(() => 1));
-      b.push(t.value - Cmass);
+      rawCoef.push(list.map(() => 1));
+      c.push(t.value - M0);
     } else {
-      const Cm = lockedList.reduce((s, i) => s + i.mass * metricCoef(t.metric, i), 0);
-      A.push(freeList.map((f) => metricCoef(t.metric, f) - t.value));
-      b.push(t.value * Cmass - Cm);
+      const C0 = list.reduce((s, ing) => s + ing.mass * metricCoef(t.metric, ing), 0);
+      rawCoef.push(list.map((ing) => metricCoef(t.metric, ing) - t.value));
+      c.push(t.value * M0 - C0);
     }
   }
 
-  const x = solveLinearSystem(A, b);
-  if (!x) {
+  // B rescales each ingredient's column by its current mass, so solving for minimum-norm z in
+  // B*z=c and converting back (Δ_i = z_i * scale[i]) is equivalent to minimum relative change.
+  const B = rawCoef.map((row) => row.map((v, i) => v * scale[i]));
+  const BBt = B.map((rowJ) => B.map((rowL) => rowJ.reduce((s, v, i) => s + v * rowL[i], 0)));
+
+  const y = solveLinearSystem(BBt, c);
+  if (!y) {
     return {
       success: false,
-      reason: 'No unique solution — the chosen free ingredients and targets are not independent of each other. Try different free ingredients or targets.',
+      reason: 'No unique solution — the active targets are not independent of each other. Try different targets.',
     };
   }
 
-  const result = freeList.map((f, idx) => ({ id: f.id, name: f.name, oldMass: f.mass, newMass: x[idx] }));
+  const result = list.map((ing, i) => {
+    const z = B.reduce((s, row, j) => s + row[i] * y[j], 0);
+    const newMass = ing.mass + z * scale[i];
+    return { id: ing.id, name: ing.name, oldMass: ing.mass, newMass };
+  });
+
   const infeasible = result.some((r) => r.newMass < -1e-6);
   return { success: true, result, infeasible };
 }
@@ -184,18 +205,15 @@ function renderPresetOptions() {
 }
 
 function renderTable() {
-  const solvedIds = new Set(Object.values(assignments).filter((v) => v != null));
   rowsEl.innerHTML = ingredients.map((ing) => {
     const sum = ing.water + ing.fat + ing.solute + ing.other;
     const warn = Math.abs(sum - 1) > 0.005
       ? `<span class="row-name-warn" title="Water+Fat+Solute+Other = ${fmt(sum * 100, 1)}%, should be ~100%">&#9888;</span>`
       : '';
-    const isSolved = solvedIds.has(ing.id);
-    const badge = isSolved ? '<span class="solved-badge" title="Mass is computed from a target">solved</span>' : '';
     return `
       <tr data-id="${ing.id}">
-        <td><input class="name-input" type="text" data-field="name" value="${escapeHtml(ing.name)}">${warn}${badge}</td>
-        <td><input type="number" step="any" data-field="mass" value="${trimNum(ing.mass)}" ${isSolved ? 'readonly' : ''}></td>
+        <td><input class="name-input" type="text" data-field="name" value="${escapeHtml(ing.name)}">${warn}</td>
+        <td><input type="number" step="any" data-field="mass" value="${trimNum(ing.mass)}"></td>
         <td><input type="number" step="any" data-field="density" value="${trimNum(ing.density)}"></td>
         <td><input type="number" step="any" data-field="water" value="${trimNum(ing.water * 100)}"></td>
         <td><input type="number" step="any" data-field="fat" value="${trimNum(ing.fat * 100)}"></td>
@@ -206,22 +224,6 @@ function renderTable() {
         <td><button class="remove-btn" data-action="remove" title="Remove">&times;</button></td>
       </tr>`;
   }).join('');
-  refreshAssignmentSelects();
-}
-
-function refreshAssignmentSelects() {
-  for (const metric of METRICS) {
-    const sel = document.getElementById(`assign-${metric}`);
-    const current = assignments[metric];
-    const stillValid = current != null && ingredients.some((i) => i.id === current);
-    sel.innerHTML = '<option value="">—</option>' + ingredients.map((i) => `<option value="${i.id}">${escapeHtml(i.name)}</option>`).join('');
-    if (stillValid) {
-      sel.value = String(current);
-    } else {
-      assignments[metric] = null;
-      sel.value = '';
-    }
-  }
 }
 
 function trimNum(n) {
@@ -255,33 +257,24 @@ function updateSummary() {
 }
 
 // --- Live solve ---
-// Every keystroke (on an ingredient field or a target value) re-solves instantly: build the
-// k-equation/k-unknown linear system from whichever ingredients are currently assigned to an
-// active target, and hand it to solveLinearSystem (Gauss-Jordan == applying the inverted matrix).
+// Every keystroke (on an ingredient field or a target value) re-solves instantly: whichever
+// target boxes hold a number become the active equations, and solveAllIngredients redistributes
+// the necessary change across every ingredient in the mix.
 
 function runSolve() {
   rowsEl.querySelectorAll('input.infeasible-mass').forEach((el) => el.classList.remove('infeasible-mass'));
 
   const active = [];
   for (const metric of METRICS) {
-    const ingredientId = assignments[metric];
-    if (ingredientId == null) continue;
     const raw = parseFloat(document.getElementById(`target-${metric}`).value);
     if (!Number.isFinite(raw)) continue;
     // fat/ts/pod/pac are displayed as "times 100" of their internal fraction; mass is grams as-is.
-    active.push({ metric, ingredientId, value: metric === 'mass' ? raw : raw / 100 });
+    active.push({ metric, value: metric === 'mass' ? raw : raw / 100 });
   }
 
   if (active.length === 0) return '';
 
-  const ids = active.map((a) => a.ingredientId);
-  if (new Set(ids).size !== ids.length) {
-    return 'Each target must be assigned to a different ingredient.';
-  }
-
-  const freeIds = new Set(ids);
-  const targets = active.map(({ metric, value }) => ({ metric, value }));
-  const result = solveForTargets(ingredients, freeIds, targets);
+  const result = solveAllIngredients(ingredients, active);
   if (!result.success) return result.reason;
 
   for (const r of result.result) {
@@ -296,7 +289,7 @@ function runSolve() {
   }
 
   return result.infeasible
-    ? 'One or more solved masses are negative — not physically achievable with this combination.'
+    ? 'One or more solved masses are negative — not physically achievable with these targets.'
     : '';
 }
 
@@ -319,7 +312,6 @@ rowsEl.addEventListener('input', (e) => {
   const field = e.target.dataset.field;
   if (field === 'name') {
     ing.name = e.target.value;
-    refreshAssignmentSelects();
     recomputeAll();
     return;
   }
@@ -349,9 +341,6 @@ rowsEl.addEventListener('click', (e) => {
     const tr = e.target.closest('tr');
     const id = Number(tr.dataset.id);
     ingredients = ingredients.filter((i) => i.id !== id);
-    for (const metric of METRICS) {
-      if (assignments[metric] === id) assignments[metric] = null;
-    }
     renderTable();
     recomputeAll();
   }
@@ -366,7 +355,6 @@ document.getElementById('add-preset-btn').addEventListener('click', () => {
 
 document.getElementById('reset-btn').addEventListener('click', () => {
   ingredients = recipeDefaults();
-  for (const metric of METRICS) assignments[metric] = null;
   document.querySelectorAll('#target-table input[type="number"]').forEach((el) => { el.value = ''; });
   renderTable();
   recomputeAll();
@@ -375,11 +363,6 @@ document.getElementById('reset-btn').addEventListener('click', () => {
 document.getElementById('overrun').addEventListener('input', updateSummary);
 
 for (const metric of METRICS) {
-  document.getElementById(`assign-${metric}`).addEventListener('change', (e) => {
-    assignments[metric] = e.target.value ? Number(e.target.value) : null;
-    renderTable();
-    recomputeAll();
-  });
   document.getElementById(`target-${metric}`).addEventListener('input', recomputeAll);
 }
 

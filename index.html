@@ -60,16 +60,16 @@
 
     <section class="solve-section">
       <h2>Solve for target</h2>
-      <p class="hint">For any metric, pick which ingredient it should solve for and enter a target value — that ingredient's mass updates live as you type, anywhere on the page. Each ingredient can be assigned to at most one target at a time.</p>
+      <p class="hint">Enter any combination of targets below — every ingredient's mass adjusts live, redistributed proportionally across the whole mix, to hit them exactly. Nothing is held fixed.</p>
       <div class="table-scroll">
         <table id="target-table" class="solve-table">
-          <thead><tr><th>Metric</th><th>Current</th><th>Target</th><th>Solve via</th></tr></thead>
+          <thead><tr><th>Metric</th><th>Current</th><th>Target</th></tr></thead>
           <tbody>
-            <tr><td>Fat %</td><td id="cur-fat">-</td><td><input type="number" id="target-fat" step="any"></td><td><select id="assign-fat"></select></td></tr>
-            <tr><td>Total Solids %</td><td id="cur-ts">-</td><td><input type="number" id="target-ts" step="any"></td><td><select id="assign-ts"></select></td></tr>
-            <tr><td>POD</td><td id="cur-pod">-</td><td><input type="number" id="target-pod" step="any"></td><td><select id="assign-pod"></select></td></tr>
-            <tr><td>PAC</td><td id="cur-pac">-</td><td><input type="number" id="target-pac" step="any"></td><td><select id="assign-pac"></select></td></tr>
-            <tr><td>Total mass (g)</td><td id="cur-mass">-</td><td><input type="number" id="target-mass" step="any"></td><td><select id="assign-mass"></select></td></tr>
+            <tr><td>Fat %</td><td id="cur-fat">-</td><td><input type="number" id="target-fat" step="any"></td></tr>
+            <tr><td>Total Solids %</td><td id="cur-ts">-</td><td><input type="number" id="target-ts" step="any"></td></tr>
+            <tr><td>POD</td><td id="cur-pod">-</td><td><input type="number" id="target-pod" step="any"></td></tr>
+            <tr><td>PAC</td><td id="cur-pac">-</td><td><input type="number" id="target-pac" step="any"></td></tr>
+            <tr><td>Total mass (g)</td><td id="cur-mass">-</td><td><input type="number" id="target-mass" step="any"></td></tr>
           </tbody>
         </table>
       </div>

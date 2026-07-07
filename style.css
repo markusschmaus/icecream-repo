@@ -242,31 +242,11 @@ td input[type="checkbox"] {
   white-space: normal;
 }
 
-.solve-table select {
-  min-width: 140px;
-}
-
 .solve-status {
   margin-top: 12px;
   font-size: 0.85rem;
   min-height: 1.2em;
   color: var(--error);
-}
-
-.solved-badge {
-  display: inline-block;
-  font-size: 0.65rem;
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  padding: 1px 6px;
-  margin-left: 6px;
-  white-space: nowrap;
-}
-
-td input[readonly] {
-  color: var(--muted);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 input.infeasible-mass {
