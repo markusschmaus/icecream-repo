@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ice Cream Formulation Calculator</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="card wide">
+    <nav class="tool-nav"><a href="index.html">&larr; Simple cream/milk calculator</a></nav>
+    <h1>Formulation Calculator</h1>
+    <p class="subtitle">Fat %, Total Solids %, POD (sweetness) and PAC (anti-freeze power) for any mix, plus solve-for-target to back out ingredient amounts.</p>
+
+    <div class="notice">
+      Composition % and POD/PAC coefficients are typical reference estimates, not lab measurements — edit any cell to match your actual ingredients or a trusted reference table.
+    </div>
+
+    <section class="ingredients-section">
+      <div class="table-scroll">
+        <table id="ingredient-table">
+          <thead>
+            <tr>
+              <th>Ingredient</th>
+              <th>Mass (g)</th>
+              <th>Density (g/mL)</th>
+              <th>Water %</th>
+              <th>Fat %</th>
+              <th>Solute %</th>
+              <th>Other solids %</th>
+              <th>POD coef</th>
+              <th>PAC coef</th>
+              <th>Free</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="ingredient-rows"></tbody>
+        </table>
+      </div>
+      <div class="table-actions">
+        <select id="preset-select"></select>
+        <button id="add-preset-btn" type="button">Add ingredient</button>
+        <button id="reset-btn" type="button" class="secondary">Reset to recipe</button>
+      </div>
+    </section>
+
+    <section class="summary-section">
+      <div class="summary-grid">
+        <div class="summary-tile"><span class="tile-label">Total mass</span><span id="sum-mass" class="tile-value">-</span></div>
+        <div class="summary-tile"><span class="tile-label">Mix volume</span><span id="sum-volume" class="tile-value">-</span></div>
+        <div class="summary-tile"><span class="tile-label">Fat %</span><span id="sum-fat" class="tile-value">-</span></div>
+        <div class="summary-tile"><span class="tile-label">Total Solids %</span><span id="sum-ts" class="tile-value">-</span></div>
+        <div class="summary-tile"><span class="tile-label">POD</span><span id="sum-pod" class="tile-value">-</span></div>
+        <div class="summary-tile"><span class="tile-label">PAC</span><span id="sum-pac" class="tile-value">-</span></div>
+      </div>
+      <div class="overrun-field">
+        <label for="overrun" style="margin:0;">Assumed overrun</label>
+        <input type="number" id="overrun" value="25" min="0" step="1"> %
+        <span id="sum-churned">-</span> churned volume
+      </div>
+    </section>
+
+    <section class="solve-section">
+      <h2>Solve for target</h2>
+      <p class="hint">Tick "Free" on the ingredients above whose masses you want the tool to compute, then tick the same number of targets below and give them values. Everything else stays fixed.</p>
+      <div class="table-scroll">
+        <table id="target-table" class="solve-table">
+          <thead><tr><th>Use</th><th>Metric</th><th>Current</th><th>Target</th></tr></thead>
+          <tbody>
+            <tr><td><input type="checkbox" id="use-fat"></td><td>Fat %</td><td id="cur-fat">-</td><td><input type="number" id="target-fat" step="any"></td></tr>
+            <tr><td><input type="checkbox" id="use-ts"></td><td>Total Solids %</td><td id="cur-ts">-</td><td><input type="number" id="target-ts" step="any"></td></tr>
+            <tr><td><input type="checkbox" id="use-pod"></td><td>POD</td><td id="cur-pod">-</td><td><input type="number" id="target-pod" step="any"></td></tr>
+            <tr><td><input type="checkbox" id="use-pac"></td><td>PAC</td><td id="cur-pac">-</td><td><input type="number" id="target-pac" step="any"></td></tr>
+            <tr><td><input type="checkbox" id="use-mass"></td><td>Total mass (g)</td><td id="cur-mass">-</td><td><input type="number" id="target-mass" step="any"></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <button id="solve-btn" type="button">Solve</button>
+      <div id="solve-result" class="solve-result"></div>
+    </section>
+  </main>
+
+  <script src="formulation.js"></script>
+</body>
+</html>
