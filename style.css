@@ -57,20 +57,11 @@ h1 {
   font-size: 0.9rem;
 }
 
-.field {
-  margin-bottom: 16px;
-}
-
 label {
   display: block;
   font-size: 0.85rem;
   color: var(--muted);
   margin-bottom: 6px;
-}
-
-.input-group {
-  display: flex;
-  gap: 8px;
 }
 
 input, select {
@@ -88,84 +79,10 @@ select {
   width: auto;
 }
 
-.unit-label {
-  display: flex;
-  align-items: center;
-  color: var(--muted);
-}
-
-.advanced {
-  margin-bottom: 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 12px;
-}
-
-.advanced summary {
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.advanced .field {
-  margin-top: 12px;
-  margin-bottom: 0;
-}
-
-.advanced .field + .field {
-  margin-top: 12px;
-}
-
-.error {
-  background: color-mix(in srgb, var(--error) 15%, transparent);
-  color: var(--error);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 0.85rem;
-  margin-bottom: 16px;
-}
-
-.result {
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
-}
-
-.result-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding: 8px 0;
-}
-
-.result-label {
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.result-value {
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: var(--accent);
-}
-
 /* --- Formulation calculator --- */
 
 .card.wide {
   max-width: 980px;
-}
-
-.tool-nav {
-  margin-bottom: 16px;
-  font-size: 0.85rem;
-}
-
-.tool-nav a {
-  color: var(--muted);
-  text-decoration: none;
-}
-
-.tool-nav a:hover {
-  color: var(--accent);
 }
 
 .notice {
