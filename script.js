@@ -198,8 +198,6 @@ function fmt(n, d = 2) {
   return n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
-function pct(f, d = 2) { return fmt(f * 100, d); }
-
 function renderPresetOptions() {
   presetSelect.innerHTML = PRESETS.map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
 }
@@ -231,10 +229,12 @@ function trimNum(n) {
   return Math.round(n * 10000) / 10000;
 }
 
+// Escapes for both text and attribute-value contexts (renderTable interpolates names
+// into value="..." attributes, so quotes must be escaped too).
 function escapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
+  return String(s).replace(/[&<>"']/g, (ch) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+  ));
 }
 
 function updateSummary() {
@@ -283,7 +283,8 @@ function runSolve() {
     ing.mass = r.newMass;
     const input = rowsEl.querySelector(`tr[data-id="${r.id}"] input[data-field="mass"]`);
     if (input) {
-      input.value = trimNum(r.newMass);
+      // Never overwrite the field the user is typing in; it re-syncs on blur (change event).
+      if (input !== document.activeElement) input.value = trimNum(r.newMass);
       input.classList.toggle('infeasible-mass', r.newMass < -1e-6);
     }
   }
@@ -296,9 +297,7 @@ function runSolve() {
 function recomputeAll() {
   const message = runSolve();
   updateSummary();
-  const statusEl = document.getElementById('solve-status');
-  statusEl.textContent = message;
-  statusEl.classList.toggle('has-error', Boolean(message));
+  document.getElementById('solve-status').textContent = message;
 }
 
 // --- Event wiring ---
@@ -312,7 +311,6 @@ rowsEl.addEventListener('input', (e) => {
   const field = e.target.dataset.field;
   if (field === 'name') {
     ing.name = e.target.value;
-    recomputeAll();
     return;
   }
   const v = parseFloat(e.target.value);
@@ -334,6 +332,15 @@ rowsEl.addEventListener('input', (e) => {
   } else if (isOff && warnEl) {
     warnEl.title = `Water+Fat+Solute+Other = ${fmt(sum * 100, 1)}%, should be ~100%`;
   }
+});
+
+// On blur, sync a mass field to the model — the solver may have moved it away from the typed
+// value while the field was focused (runSolve skips rewriting the active element).
+rowsEl.addEventListener('change', (e) => {
+  if (e.target.dataset.field !== 'mass') return;
+  const tr = e.target.closest('tr');
+  const ing = tr && ingredients.find((i) => i.id === Number(tr.dataset.id));
+  if (ing) e.target.value = trimNum(ing.mass);
 });
 
 rowsEl.addEventListener('click', (e) => {
