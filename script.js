@@ -17,9 +17,12 @@ function makeIngredient(o) {
     other: o.other,
     pod: o.pod,
     pac: o.pac,
-    free: false,
   };
 }
+
+// Which ingredient (by id) each metric currently solves for, or null if unassigned.
+const METRICS = ['fat', 'ts', 'pod', 'pac', 'mass'];
+const assignments = { fat: null, ts: null, pod: null, pac: null, mass: null };
 
 const PRESETS = [
   { name: 'Cream, 30% fat', mass: 610, density: 0.99, water: 0.646, fat: 0.30, solute: 0.029, other: 0.025, pod: 0.16, pac: 1.00 },
@@ -181,15 +184,18 @@ function renderPresetOptions() {
 }
 
 function renderTable() {
+  const solvedIds = new Set(Object.values(assignments).filter((v) => v != null));
   rowsEl.innerHTML = ingredients.map((ing) => {
     const sum = ing.water + ing.fat + ing.solute + ing.other;
     const warn = Math.abs(sum - 1) > 0.005
       ? `<span class="row-name-warn" title="Water+Fat+Solute+Other = ${fmt(sum * 100, 1)}%, should be ~100%">&#9888;</span>`
       : '';
+    const isSolved = solvedIds.has(ing.id);
+    const badge = isSolved ? '<span class="solved-badge" title="Mass is computed from a target">solved</span>' : '';
     return `
       <tr data-id="${ing.id}">
-        <td><input class="name-input" type="text" data-field="name" value="${escapeHtml(ing.name)}">${warn}</td>
-        <td><input type="number" step="any" data-field="mass" value="${trimNum(ing.mass)}"></td>
+        <td><input class="name-input" type="text" data-field="name" value="${escapeHtml(ing.name)}">${warn}${badge}</td>
+        <td><input type="number" step="any" data-field="mass" value="${trimNum(ing.mass)}" ${isSolved ? 'readonly' : ''}></td>
         <td><input type="number" step="any" data-field="density" value="${trimNum(ing.density)}"></td>
         <td><input type="number" step="any" data-field="water" value="${trimNum(ing.water * 100)}"></td>
         <td><input type="number" step="any" data-field="fat" value="${trimNum(ing.fat * 100)}"></td>
@@ -197,10 +203,25 @@ function renderTable() {
         <td><input type="number" step="any" data-field="other" value="${trimNum(ing.other * 100)}"></td>
         <td><input type="number" step="any" data-field="pod" value="${trimNum(ing.pod)}"></td>
         <td><input type="number" step="any" data-field="pac" value="${trimNum(ing.pac)}"></td>
-        <td><input type="checkbox" data-field="free" ${ing.free ? 'checked' : ''}></td>
         <td><button class="remove-btn" data-action="remove" title="Remove">&times;</button></td>
       </tr>`;
   }).join('');
+  refreshAssignmentSelects();
+}
+
+function refreshAssignmentSelects() {
+  for (const metric of METRICS) {
+    const sel = document.getElementById(`assign-${metric}`);
+    const current = assignments[metric];
+    const stillValid = current != null && ingredients.some((i) => i.id === current);
+    sel.innerHTML = '<option value="">—</option>' + ingredients.map((i) => `<option value="${i.id}">${escapeHtml(i.name)}</option>`).join('');
+    if (stillValid) {
+      sel.value = String(current);
+    } else {
+      assignments[metric] = null;
+      sel.value = '';
+    }
+  }
 }
 
 function trimNum(n) {
@@ -233,6 +254,60 @@ function updateSummary() {
   document.getElementById('sum-churned').textContent = `~${fmt((m.volume * (1 + overrun / 100)) / 1000, 2)} L`;
 }
 
+// --- Live solve ---
+// Every keystroke (on an ingredient field or a target value) re-solves instantly: build the
+// k-equation/k-unknown linear system from whichever ingredients are currently assigned to an
+// active target, and hand it to solveLinearSystem (Gauss-Jordan == applying the inverted matrix).
+
+function runSolve() {
+  rowsEl.querySelectorAll('input.infeasible-mass').forEach((el) => el.classList.remove('infeasible-mass'));
+
+  const active = [];
+  for (const metric of METRICS) {
+    const ingredientId = assignments[metric];
+    if (ingredientId == null) continue;
+    const raw = parseFloat(document.getElementById(`target-${metric}`).value);
+    if (!Number.isFinite(raw)) continue;
+    // fat/ts/pod/pac are displayed as "times 100" of their internal fraction; mass is grams as-is.
+    active.push({ metric, ingredientId, value: metric === 'mass' ? raw : raw / 100 });
+  }
+
+  if (active.length === 0) return '';
+
+  const ids = active.map((a) => a.ingredientId);
+  if (new Set(ids).size !== ids.length) {
+    return 'Each target must be assigned to a different ingredient.';
+  }
+
+  const freeIds = new Set(ids);
+  const targets = active.map(({ metric, value }) => ({ metric, value }));
+  const result = solveForTargets(ingredients, freeIds, targets);
+  if (!result.success) return result.reason;
+
+  for (const r of result.result) {
+    const ing = ingredients.find((i) => i.id === r.id);
+    if (!ing) continue;
+    ing.mass = r.newMass;
+    const input = rowsEl.querySelector(`tr[data-id="${r.id}"] input[data-field="mass"]`);
+    if (input) {
+      input.value = trimNum(r.newMass);
+      input.classList.toggle('infeasible-mass', r.newMass < -1e-6);
+    }
+  }
+
+  return result.infeasible
+    ? 'One or more solved masses are negative — not physically achievable with this combination.'
+    : '';
+}
+
+function recomputeAll() {
+  const message = runSolve();
+  updateSummary();
+  const statusEl = document.getElementById('solve-status');
+  statusEl.textContent = message;
+  statusEl.classList.toggle('has-error', Boolean(message));
+}
+
 // --- Event wiring ---
 
 rowsEl.addEventListener('input', (e) => {
@@ -244,10 +319,8 @@ rowsEl.addEventListener('input', (e) => {
   const field = e.target.dataset.field;
   if (field === 'name') {
     ing.name = e.target.value;
-    return;
-  }
-  if (field === 'free') {
-    ing.free = e.target.checked;
+    refreshAssignmentSelects();
+    recomputeAll();
     return;
   }
   const v = parseFloat(e.target.value);
@@ -257,7 +330,7 @@ rowsEl.addEventListener('input', (e) => {
   } else {
     ing[field] = val;
   }
-  updateSummary();
+  recomputeAll();
   // re-render only to refresh the row-sum warning icon, without losing focus elsewhere
   const warnEl = tr.querySelector('.row-name-warn');
   const sum = ing.water + ing.fat + ing.solute + ing.other;
@@ -276,8 +349,11 @@ rowsEl.addEventListener('click', (e) => {
     const tr = e.target.closest('tr');
     const id = Number(tr.dataset.id);
     ingredients = ingredients.filter((i) => i.id !== id);
+    for (const metric of METRICS) {
+      if (assignments[metric] === id) assignments[metric] = null;
+    }
     renderTable();
-    updateSummary();
+    recomputeAll();
   }
 });
 
@@ -285,72 +361,29 @@ document.getElementById('add-preset-btn').addEventListener('click', () => {
   const p = PRESETS[Number(presetSelect.value)];
   ingredients.push(makeIngredient({ ...p }));
   renderTable();
-  updateSummary();
+  recomputeAll();
 });
 
 document.getElementById('reset-btn').addEventListener('click', () => {
   ingredients = recipeDefaults();
+  for (const metric of METRICS) assignments[metric] = null;
+  document.querySelectorAll('#target-table input[type="number"]').forEach((el) => { el.value = ''; });
   renderTable();
-  updateSummary();
+  recomputeAll();
 });
 
 document.getElementById('overrun').addEventListener('input', updateSummary);
 
-document.getElementById('solve-btn').addEventListener('click', () => {
-  const freeIds = new Set(ingredients.filter((i) => i.free).map((i) => i.id));
-  const targets = [];
-  const specs = [
-    ['fat', 'use-fat', 'target-fat'],
-    ['ts', 'use-ts', 'target-ts'],
-    ['pod', 'use-pod', 'target-pod'],
-    ['pac', 'use-pac', 'target-pac'],
-    ['mass', 'use-mass', 'target-mass'],
-  ];
-  for (const [metric, useId, valId] of specs) {
-    if (document.getElementById(useId).checked) {
-      const v = parseFloat(document.getElementById(valId).value);
-      if (!Number.isFinite(v)) continue;
-      // fat/ts/pod/pac are all displayed as "times 100" of their internal fraction; mass is grams as-is.
-      targets.push({ metric, value: metric === 'mass' ? v : v / 100 });
-    }
-  }
-
-  const result = solveForTargets(ingredients, freeIds, targets);
-  renderSolveResult(result);
-});
-
-function renderSolveResult(result) {
-  const el = document.getElementById('solve-result');
-  if (!result.success) {
-    el.innerHTML = `<div class="solve-error">${escapeHtml(result.reason)}</div>`;
-    return;
-  }
-  const rows = result.result.map((r) => `
-    <tr>
-      <td>${escapeHtml(r.name)}</td>
-      <td>${fmt(r.oldMass, 2)} g</td>
-      <td>${fmt(r.newMass, 2)} g</td>
-    </tr>`).join('');
-  el.innerHTML = `
-    <table class="solve-table">
-      <thead><tr><th>Ingredient</th><th>Current</th><th>Proposed</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    ${result.infeasible ? '<div class="infeasible-note">One or more proposed masses are negative — this target combination isn\'t physically achievable with the selected free ingredients. Try different targets or free ingredients.</div>' : ''}
-    <button class="apply-btn" id="apply-solve-btn" ${result.infeasible ? 'disabled' : ''}>Apply to ingredients</button>
-  `;
-  document.getElementById('apply-solve-btn')?.addEventListener('click', () => {
-    for (const r of result.result) {
-      const ing = ingredients.find((i) => i.id === r.id);
-      if (ing) ing.mass = r.newMass;
-    }
+for (const metric of METRICS) {
+  document.getElementById(`assign-${metric}`).addEventListener('change', (e) => {
+    assignments[metric] = e.target.value ? Number(e.target.value) : null;
     renderTable();
-    updateSummary();
-    el.innerHTML = '';
+    recomputeAll();
   });
+  document.getElementById(`target-${metric}`).addEventListener('input', recomputeAll);
 }
 
 // --- Init ---
 renderPresetOptions();
 renderTable();
-updateSummary();
+recomputeAll();
