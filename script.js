@@ -124,18 +124,17 @@ function solveLinearSystem(A, b) {
   return M.map((row, i) => row[n] / row[i]);
 }
 
-// Solves for ALL ingredient masses at once — nothing is held fixed. With k active targets and
-// n ingredients (k <= n, usually k << n), the system is underdetermined, so there are infinitely
-// many mixes that hit the targets exactly. We pick the one closest to the current recipe in a
-// weighted least-squares sense: minimize the sum of squared *relative* changes
-// (sum((Δmass_i / mass_i)^2)), which is the standard minimum-norm least-squares solution once
-// each ingredient's row is rescaled by its own current mass. That reduces to solving a small
-// k x k system (the Gram matrix B*B^T) with the same Gauss-Jordan solver as a plain inverse —
-// this is exactly "applying the inverted matrix," generalized to a non-square system via its
-// Moore-Penrose pseudo-inverse. Ingredients with zero coefficient for every active target get
-// zero change automatically; ingredients that barely move the target need to move very little
-// (in relative terms) to satisfy it, so change concentrates on whichever ingredients are actually
-// relevant instead of being spread evenly or dumped onto one arbitrary ingredient.
+// Solves for ALL ingredient masses at once — nothing is held fixed on the ingredient side.
+// Called with all 5 metrics as constraints (4 pinned at current values + 1 at its new value),
+// so k=5 equations against n ingredients (k <= n): the system is underdetermined and there are
+// infinitely many mixes that hit the constraints exactly. We pick the one closest to the
+// current recipe in a weighted least-squares sense: minimize the sum of squared *relative*
+// changes (sum((Δmass_i / mass_i)^2)), which is the standard minimum-norm least-squares
+// solution once each ingredient's row is rescaled by its own current mass. That reduces to
+// solving a small k x k system (the Gram matrix B*B^T) with the same Gauss-Jordan solver as a
+// plain inverse — "applying the inverted matrix," generalized to a non-square system via its
+// Moore-Penrose pseudo-inverse. Change concentrates on whichever ingredients actually move the
+// edited metric while the pinned constraints keep everything else in place.
 function solveAllIngredients(list, activeTargets) {
   const n = list.length;
   const k = activeTargets.length;
@@ -143,7 +142,7 @@ function solveAllIngredients(list, activeTargets) {
   if (k > n) {
     return {
       success: false,
-      reason: `${k} active target(s) but only ${n} ingredient(s) in the mix — remove a target or add more ingredients.`,
+      reason: `Solving needs at least ${k} ingredients (one per constrained metric) but the mix only has ${n}.`,
     };
   }
 
@@ -174,7 +173,7 @@ function solveAllIngredients(list, activeTargets) {
   if (!y) {
     return {
       success: false,
-      reason: 'No unique solution — the active targets are not independent of each other. Try different targets.',
+      reason: 'No solution — the ingredients are not compositionally diverse enough to move this metric while holding the others fixed.',
     };
   }
 
@@ -237,6 +236,12 @@ function escapeHtml(s) {
   ));
 }
 
+// Current value of each metric in its *display* units (fat/ts/pod/pac as x100, mass in grams).
+function metricDisplayValues() {
+  const m = computeMetrics(ingredients);
+  return { fat: m.fatPct, ts: m.tsPct, pod: m.pod, pac: m.pac, mass: m.mass };
+}
+
 function updateSummary() {
   const m = computeMetrics(ingredients);
   document.getElementById('sum-mass').textContent = `${fmt(m.mass, 1)} g`;
@@ -246,57 +251,73 @@ function updateSummary() {
   document.getElementById('sum-pod').textContent = fmt(m.pod, 2);
   document.getElementById('sum-pac').textContent = fmt(m.pac, 2);
 
-  document.getElementById('cur-fat').textContent = `${fmt(m.fatPct, 2)}%`;
-  document.getElementById('cur-ts').textContent = `${fmt(m.tsPct, 2)}%`;
-  document.getElementById('cur-pod').textContent = fmt(m.pod, 2);
-  document.getElementById('cur-pac').textContent = fmt(m.pac, 2);
-  document.getElementById('cur-mass').textContent = `${fmt(m.mass, 1)} g`;
-
   const overrun = parseFloat(document.getElementById('overrun').value) || 0;
   document.getElementById('sum-churned').textContent = `~${fmt((m.volume * (1 + overrun / 100)) / 1000, 2)} L`;
+
+  refreshMetricInputs();
+}
+
+// The metric boxes are editable outputs: they always show the mix's current values, except
+// the one the user is typing in, which re-syncs on blur.
+function refreshMetricInputs() {
+  const vals = metricDisplayValues();
+  for (const metric of METRICS) {
+    const input = document.getElementById(`target-${metric}`);
+    if (input !== document.activeElement) input.value = trimNum(vals[metric]);
+  }
 }
 
 // --- Live solve ---
-// Every keystroke (on an ingredient field or a target value) re-solves instantly: whichever
-// target boxes hold a number become the active equations, and solveAllIngredients redistributes
-// the necessary change across every ingredient in the mix.
+// Editing one metric re-solves with ALL five metrics as constraints: the edited one at its new
+// value, the other four pinned at their current values. Ingredient masses redistribute to
+// satisfy all five simultaneously, so changing Fat% leaves TS%, POD, PAC and total mass intact.
 
-function runSolve() {
-  rowsEl.querySelectorAll('input.infeasible-mass').forEach((el) => el.classList.remove('infeasible-mass'));
+// Masses snapshotted when a metric box gains focus. Each keystroke solves relative to this
+// baseline instead of the previous keystroke's result — otherwise typing "12" would solve at
+// "1" first and then re-solve from that shifted mix, making the outcome depend on typing path.
+let editBaseline = null;
 
-  const active = [];
-  for (const metric of METRICS) {
-    const raw = parseFloat(document.getElementById(`target-${metric}`).value);
-    if (!Number.isFinite(raw)) continue;
-    // fat/ts/pod/pac are displayed as "times 100" of their internal fraction; mass is grams as-is.
-    active.push({ metric, value: metric === 'mass' ? raw : raw / 100 });
+function solveForMetricEdit(editedMetric) {
+  const raw = parseFloat(document.getElementById(`target-${editedMetric}`).value);
+  if (!Number.isFinite(raw)) return ''; // mid-typing (empty/partial) — wait for a number
+
+  if (editBaseline) {
+    for (const ing of ingredients) {
+      const saved = editBaseline.get(ing.id);
+      if (saved !== undefined) ing.mass = saved;
+    }
   }
 
-  if (active.length === 0) return '';
+  const current = metricDisplayValues();
+  // Convert display units to internal: fat/ts/pod/pac are fractions internally, mass is grams.
+  const toInternal = (metric, v) => (metric === 'mass' ? v : v / 100);
+  const targets = METRICS.map((metric) => ({
+    metric,
+    value: toInternal(metric, metric === editedMetric ? raw : current[metric]),
+  }));
 
-  const result = solveAllIngredients(ingredients, active);
+  const result = solveAllIngredients(ingredients, targets);
   if (!result.success) return result.reason;
 
+  rowsEl.querySelectorAll('input.infeasible-mass').forEach((el) => el.classList.remove('infeasible-mass'));
   for (const r of result.result) {
     const ing = ingredients.find((i) => i.id === r.id);
     if (!ing) continue;
     ing.mass = r.newMass;
     const input = rowsEl.querySelector(`tr[data-id="${r.id}"] input[data-field="mass"]`);
     if (input) {
-      // Never overwrite the field the user is typing in; it re-syncs on blur (change event).
+      // Never overwrite a field the user is typing in; it re-syncs on blur (change event).
       if (input !== document.activeElement) input.value = trimNum(r.newMass);
       input.classList.toggle('infeasible-mass', r.newMass < -1e-6);
     }
   }
 
   return result.infeasible
-    ? 'One or more solved masses are negative — not physically achievable with these targets.'
+    ? 'One or more solved masses are negative — this value is not reachable while holding the other metrics fixed.'
     : '';
 }
 
-function recomputeAll() {
-  const message = runSolve();
-  updateSummary();
+function setStatus(message) {
   document.getElementById('solve-status').textContent = message;
 }
 
@@ -320,7 +341,7 @@ rowsEl.addEventListener('input', (e) => {
   } else {
     ing[field] = val;
   }
-  recomputeAll();
+  updateSummary();
   // re-render only to refresh the row-sum warning icon, without losing focus elsewhere
   const warnEl = tr.querySelector('.row-name-warn');
   const sum = ing.water + ing.fat + ing.solute + ing.other;
@@ -349,7 +370,8 @@ rowsEl.addEventListener('click', (e) => {
     const id = Number(tr.dataset.id);
     ingredients = ingredients.filter((i) => i.id !== id);
     renderTable();
-    recomputeAll();
+    setStatus('');
+    updateSummary();
   }
 });
 
@@ -357,23 +379,36 @@ document.getElementById('add-preset-btn').addEventListener('click', () => {
   const p = PRESETS[Number(presetSelect.value)];
   ingredients.push(makeIngredient({ ...p }));
   renderTable();
-  recomputeAll();
+  updateSummary();
 });
 
 document.getElementById('reset-btn').addEventListener('click', () => {
   ingredients = recipeDefaults();
-  document.querySelectorAll('#target-table input[type="number"]').forEach((el) => { el.value = ''; });
   renderTable();
-  recomputeAll();
+  setStatus('');
+  updateSummary();
 });
 
 document.getElementById('overrun').addEventListener('input', updateSummary);
 
 for (const metric of METRICS) {
-  document.getElementById(`target-${metric}`).addEventListener('input', recomputeAll);
+  const input = document.getElementById(`target-${metric}`);
+  input.addEventListener('focus', () => {
+    editBaseline = new Map(ingredients.map((i) => [i.id, i.mass]));
+  });
+  input.addEventListener('input', () => {
+    setStatus(solveForMetricEdit(metric));
+    updateSummary();
+  });
+  // On blur, snap the edited box back to the mix's actual value (identical to the typed value
+  // after a successful solve; the real current value after an invalid/incomplete edit).
+  input.addEventListener('blur', () => {
+    editBaseline = null;
+    input.value = trimNum(metricDisplayValues()[metric]);
+  });
 }
 
 // --- Init ---
 renderPresetOptions();
 renderTable();
-recomputeAll();
+updateSummary();
