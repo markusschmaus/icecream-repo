@@ -42,6 +42,8 @@ INGREDIENTS = [
     dict(name="Neutral oil", density=0.92, water=0.0, fat=1.0, solute=0.0, other=0.0, pod=0.0, pac=0.0),
     dict(name="Water", density=1.0, water=1.0, fat=0.0, solute=0.0, other=0.0, pod=0.0, pac=0.0),
     dict(name="Spirit / liqueur, 40% ABV", density=0.95, water=0.68, fat=0.0, solute=0.32, other=0.0, pod=0.0, pac=5.80),
+    dict(name="Balsamic vinegar", density=1.06, water=0.77, fat=0.0, solute=0.15, other=0.08, pod=1.10, pac=1.60),
+    dict(name="Black pepper, cracked", density=1.0, water=0.10, fat=0.02, solute=0.0, other=0.88, pod=0.0, pac=0.0),
 ]
 
 INSERTION_POINTS = [
