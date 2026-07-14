@@ -37,6 +37,43 @@ class Ingredient(Base):
     pod: Mapped[float] = mapped_column(Float, default=0.0)
     pac: Mapped[float] = mapped_column(Float, default=0.0)
 
+    groups: Mapped[list["IngredientGroup"]] = relationship(
+        secondary="ingredient_group_members", back_populates="members"
+    )
+
+
+class IngredientGroup(Base):
+    """A named set of substitutable ingredients (e.g. "Sweeteners": sucrose,
+    dextrose, fructose, invert sugar, honey). Catalog-level and reusable across
+    recipes; membership is many-to-many since an ingredient can play more than
+    one substitutable role (honey is both a sweetener and a liquid sugar).
+
+    A recipe item opts into a group via RecipeItem.ingredient_group_id, which
+    marks that line as a blend-solve candidate in that recipe - see
+    RecipeItem for why group membership alone isn't enough to say that.
+    """
+
+    __tablename__ = "ingredient_groups"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(80), unique=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+
+    members: Mapped[list[Ingredient]] = relationship(
+        secondary="ingredient_group_members", back_populates="groups"
+    )
+
+
+class IngredientGroupMember(Base):
+    __tablename__ = "ingredient_group_members"
+
+    ingredient_id: Mapped[int] = mapped_column(
+        ForeignKey("ingredients.id", ondelete="CASCADE"), primary_key=True
+    )
+    group_id: Mapped[int] = mapped_column(
+        ForeignKey("ingredient_groups.id", ondelete="CASCADE"), primary_key=True
+    )
+
 
 class InsertionPoint(Base):
     """One of the 8 points in the generic method where additions can go.
@@ -124,6 +161,17 @@ class RecipeItem(Base):
 
     Deeper cycles (A -> B -> A) are rejected by the API with a graph walk; the
     DB check only rules out direct self-reference.
+
+    ingredient_group_id tags this line as a blend-solve candidate: the app can
+    redistribute mass across every item in the same recipe sharing the same
+    group, holding their combined mass fixed, to hit a target metric (see
+    solver.solve_group_blend). It's a separate flag from catalog-level group
+    membership (Ingredient.groups) because an ingredient can belong to more
+    than one group (e.g. honey is both a sweetener and a liquid sugar) - this
+    field says which one applies to this line, in this recipe. The API
+    validates on write that the item's ingredient is actually a member of the
+    chosen group; the DB only enforces that it's set exclusively on ingredient
+    lines, never on component lines.
     """
 
     __tablename__ = "recipe_items"
@@ -137,6 +185,10 @@ class RecipeItem(Base):
             name="ck_item_no_self_reference",
         ),
         CheckConstraint("amount_g >= 0", name="ck_item_amount_nonnegative"),
+        CheckConstraint(
+            "ingredient_group_id IS NULL OR ingredient_id IS NOT NULL",
+            name="ck_item_group_requires_ingredient",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -152,6 +204,9 @@ class RecipeItem(Base):
     insertion_point_id: Mapped[int | None] = mapped_column(
         ForeignKey("insertion_points.id"), nullable=True
     )
+    ingredient_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ingredient_groups.id"), nullable=True
+    )
     amount_g: Mapped[float] = mapped_column(Float)
     preparation: Mapped[str] = mapped_column(String(200), default="")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
@@ -162,3 +217,4 @@ class RecipeItem(Base):
     ingredient: Mapped[Ingredient | None] = relationship()
     component: Mapped[Recipe | None] = relationship(foreign_keys=[component_recipe_id])
     insertion_point: Mapped[InsertionPoint | None] = relationship()
+    ingredient_group: Mapped[IngredientGroup | None] = relationship()

@@ -1,11 +1,19 @@
-"""Idempotent seed data: ingredient catalog, the 8 insertion points, the 16
-generic method steps, the generic custard base as a template recipe, and a
-stracciatella variation demonstrating a component sub-recipe."""
+"""Idempotent seed data: ingredient catalog, ingredient groups, the 8
+insertion points, the 16 generic method steps, the generic custard base as a
+template recipe, and a stracciatella variation demonstrating a component
+sub-recipe."""
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import Ingredient, InsertionPoint, MethodStep, Recipe, RecipeItem
+from .models import (
+    Ingredient,
+    IngredientGroup,
+    InsertionPoint,
+    MethodStep,
+    Recipe,
+    RecipeItem,
+)
 
 # Composition fractions 0-1; pod/pac relative to sucrose = 1.00.
 INGREDIENTS = [
@@ -78,6 +86,28 @@ BASE_ITEMS = [
     ("Salt, fine", 1, None, "", 5),
 ]
 
+# Groups of ingredients that can be blend-solved against each other (see
+# solver.solve_group_blend): (group name, description, member ingredient names)
+INGREDIENT_GROUPS = [
+    (
+        "Sweeteners",
+        "Sugars that can be blended against each other to hit a POD/PAC target "
+        "without changing the total sweetener mass.",
+        [
+            "Sugar (sucrose)",
+            "Dextrose",
+            "Fructose",
+            "Invert sugar (dry equiv.)",
+            "Honey",
+        ],
+    ),
+    (
+        "Stabilizer gums",
+        "Interchangeable thickener/stabilizer gums.",
+        ["Guar gum", "Xanthan gum", "Locust bean gum"],
+    ),
+]
+
 
 def seed(db: Session) -> None:
     if db.scalar(select(Ingredient.id).limit(1)) is not None:
@@ -90,6 +120,15 @@ def seed(db: Session) -> None:
         MethodStep(step_number=n, insertion_point_id=ip, instruction=text)
         for n, ip, text in METHOD_STEPS
     )
+    groups = {
+        name: IngredientGroup(
+            name=name,
+            description=desc,
+            members=[ingredients[m] for m in member_names],
+        )
+        for name, desc, member_names in INGREDIENT_GROUPS
+    }
+    db.add_all(groups.values())
     db.flush()
 
     def base_items():
@@ -100,6 +139,9 @@ def seed(db: Session) -> None:
                 insertion_point_id=ip,
                 preparation=prep,
                 sort_order=order,
+                ingredient_group_id=(
+                    groups["Sweeteners"].id if name == "Sugar (sucrose)" else None
+                ),
             )
             for name, amount, ip, prep, order in BASE_ITEMS
         ]
@@ -152,6 +194,15 @@ def seed(db: Session) -> None:
                 insertion_point_id=5,
                 preparation="thin stream while dasher runs",
                 sort_order=7,
+            ),
+            # A second Sweeteners-group member alongside the base's sucrose,
+            # so this recipe has >=2 real blend-solve candidates in that group.
+            RecipeItem(
+                ingredient_id=ingredients["Dextrose"].id,
+                amount_g=20,
+                preparation="part of the sweetener blend, softens texture",
+                sort_order=8,
+                ingredient_group_id=groups["Sweeteners"].id,
             ),
         ],
     )
