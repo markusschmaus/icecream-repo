@@ -234,18 +234,195 @@ td input.name-input {
   width: 70px;
 }
 
-.solve-table td, .solve-table th {
-  white-space: normal;
-}
-
-.solve-status {
-  margin-top: 12px;
-  font-size: 0.85rem;
-  min-height: 1.2em;
-  color: var(--error);
-}
-
 input.infeasible-mass {
   border-color: var(--error);
   color: var(--error);
+}
+
+/* --- Recipe studio --- */
+
+.hidden {
+  display: none !important;
+}
+
+.global-warn {
+  color: var(--error);
+  margin-left: auto;
+}
+
+.group-boxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.group-box {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.group-box h3 {
+  margin: 0 0 2px;
+  font-size: 0.95rem;
+}
+
+.group-members {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.target-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.target-row label {
+  flex: 0 0 110px;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.target-row input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.target-row-free label {
+  color: var(--muted);
+}
+
+.target-row-free input[type="number"] {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.target-row input {
+  width: 100px;
+  padding: 6px 8px;
+  font-size: 0.9rem;
+}
+
+.drift {
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+
+.group-status {
+  color: var(--error);
+  font-size: 0.8rem;
+  min-height: 1em;
+  margin-top: 4px;
+}
+
+.step-block {
+  border-left: 3px solid var(--border);
+  padding-left: 16px;
+  margin: 18px 0;
+}
+
+.step-block h3 {
+  margin: 0 0 2px;
+  font-size: 0.95rem;
+}
+
+.step-instructions {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  max-width: 70ch;
+}
+
+.step-empty {
+  margin: 0;
+  font-style: italic;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.badge-lever {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.role-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.role-ctl input {
+  width: 70px;
+  padding: 5px 6px;
+  font-size: 0.85rem;
+}
+
+.unit {
+  color: var(--muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.mass-ro {
+  display: inline-block;
+  min-width: 60px;
+  color: var(--muted);
+}
+
+.add-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.add-bar select {
+  min-width: 140px;
+}
+
+.add-bar button {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.library {
+  margin-top: 28px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+.library summary {
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.library .table-scroll {
+  margin-top: 10px;
+}
+
+.footer-actions {
+  margin-top: 20px;
 }

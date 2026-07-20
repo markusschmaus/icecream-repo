@@ -102,9 +102,20 @@ The three roles encode who is allowed to change a line's mass:
 interface Group {
   id: string;
   name: string;              // "Dairy & water", "Sweeteners"
-  owns: MetricId[];          // metrics this group is responsible for hitting
+  metrics: MetricId[];       // candidate metrics this group can be responsible for
+  owns: MetricId[];          // currently PINNED subset of metrics (owns ⊆ metrics)
 }
 ```
+
+The `metrics`/`owns` split exists because not every candidate set is jointly
+pinnable. Concretely: every dairy ingredient (and water) satisfies
+`fat + water + msnf = 1` exactly — all dairy solids are either fat or MSNF — so
+fat %, water %, MSNF % and total mass are linearly dependent on the lever side,
+and at most three of the four can be held at once. The UI exposes this as a pin
+checkbox per metric: pinned metrics are constraints the group holds, unpinned
+ones are read-only outcomes. Pinning a metric adopts its current measured value
+as the target (nothing jumps); pinning a dependent combination is detected by
+the solver and reported, not silently mis-solved.
 
 Groups partition the lever lines and declare responsibility. Editing a metric
 dispatches the solve to its owning group only — that is what makes tuning
@@ -208,8 +219,10 @@ redistribution.
   ],
 
   "groups": [
-    { "id": "dairy", "name": "Dairy & water", "owns": ["fat", "msnf", "water"] },
-    { "id": "sweet", "name": "Sweeteners",    "owns": ["pod", "pac"] }
+    { "id": "dairy", "name": "Dairy & water",
+      "metrics": ["fat", "msnf", "water", "mass"], "owns": ["fat", "msnf", "mass"] },
+    { "id": "sweet", "name": "Sweeteners",
+      "metrics": ["pod", "pac"], "owns": ["pod", "pac"] }
   ],
 
   "lines": [
@@ -244,12 +257,14 @@ redistribution.
   ],
 
   "targets": [
-    { "metric": "fat",   "value": 14.0 },
-    { "metric": "msnf",  "value": 9.5 },
-    { "metric": "water", "value": 61.0 },
-    { "metric": "pod",   "value": 16.0 },
-    { "metric": "pac",   "value": 25.0 }
+    { "metric": "fat",  "value": 14.0 },
+    { "metric": "msnf", "value": 9.5 },
+    { "metric": "mass", "value": 1650 },
+    { "metric": "pod",  "value": 16.0 },
+    { "metric": "pac",  "value": 25.0 }
   ]
+  // water % is unpinned here — it reads as an outcome. To tune water directly,
+  // pin it and unpin one of fat/msnf/mass (they are dependent, see Group).
 }
 ```
 
